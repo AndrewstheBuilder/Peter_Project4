@@ -27,7 +27,7 @@ class NaiveBayesClassifier(classificationMethod.ClassificationMethod):
         self.k = 1 # this is the smoothing parameter, ** use it in your train method **
         self.automaticTuning = False # Look at this flag to decide whether to choose k automatically ** use this in your train method **
         self.conditionalProbTable = OrderedDict()
-        self.priorProbab = OrderedDict()
+        self.priorProb = OrderedDict()
 
     def setSmoothing(self, k):
         """
@@ -69,10 +69,8 @@ class NaiveBayesClassifier(classificationMethod.ClassificationMethod):
                 for feature in self.features:
                     countFeatureIs0 = featuresForLabel[feature+(0,)]
                     countFeatureIs1 = featuresForLabel[feature+(1,)]
-                    probFeatureIs0 = countFeatureIs0/(countFeatureIs0+countFeatureIs1)
-                    probFeatureIs1 = countFeatureIs1/(countFeatureIs0+countFeatureIs1)
-                    smoothedCondProbFor0 = (probFeatureIs0+k)/((probFeatureIs0+k)+(probFeatureIs1+k))
-                    smoothedCondProbFor1 = (probFeatureIs1+k)/((probFeatureIs0+k)+(probFeatureIs1+k))
+                    smoothedCondProbFor0 = (countFeatureIs0+k)/((countFeatureIs0+k)+(countFeatureIs1+k))
+                    smoothedCondProbFor1 = (countFeatureIs1+k)/((countFeatureIs0+k)+(countFeatureIs1+k))
                     featureTable[feature] = [smoothedCondProbFor0,smoothedCondProbFor1] #contains probability that feature is a 0 or 1
         return conditionalProbforK
 
@@ -88,9 +86,27 @@ class NaiveBayesClassifier(classificationMethod.ClassificationMethod):
             guesses[k] = []
             self.conditionalProbTable = table
             for datum in validationData:
-                #print('datum in validationData',datum)
                 posterior = self.calculateLogJointProbabilities(datum)
                 guesses[k].append(posterior.argMax())
+
+        #evaluate accuracy of guesses and assign best K conditional probability table to self.conditionalProbTable
+        bestK = 0
+        bestAccuracy = 0.00
+        for k in kgrid:
+            correct = 0
+            incorrect = 0
+            for label,indexList in validateKeysDict.items():
+                guessList = guesses[k]
+                for index in indexList:
+                    if(guessList[index] == label):
+                        correct += 1
+                    else:
+                        incorrect += 1
+            currAccuracy = correct/(correct+incorrect)
+            if(bestAccuracy < currAccuracy ):
+                bestAccuracy = currAccuracy
+                bestK = k
+        self.conditionalProbTable = conditionalProbForK[bestK] #set conditional table to best conditional table
 
 
     def trainAndTune(self, trainingData, trainingLabels, validationData, validationLabels, kgrid):
@@ -110,49 +126,29 @@ class NaiveBayesClassifier(classificationMethod.ClassificationMethod):
         "*** YOUR CODE HERE ***"
         trainingKeysDict = OrderedDict()
         validateKeysDict = OrderedDict()
-        initialPixelCount = OrderedDict()
+        trainDataFeatureCount = OrderedDict()
         for label in self.legalLabels:
             trainingKeysDict[label] = [index for index in range(len(trainingLabels)) if trainingLabels[index] == label]
             validateKeysDict[label] = [index for index in range(len(validationLabels)) if validationLabels[index] == label]
-        for key,indexList in trainingKeysDict.items():
-            #print('key',key)
-            initialPixelCount[key] = util.Counter()
-            self.priorProbab[key] = len(indexList)/len(self.legalLabels)
+        for label,indexList in trainingKeysDict.items():
+            trainDataFeatureCount[label] = util.Counter()
+            self.priorProb[label] = len(indexList)/len(trainingLabels)
             for index in indexList:
-                # initialPixelCount[key]
                 for pixel in trainingData[index]:
-                    # print('pixel',pixel)
-                    # print('type(pixel)',type(pixel))
-                    # print('pixel 1 or 0:',trainingData[index][pixel])
                     if(trainingData[index][pixel] == 1):
-                        initialPixelCount[key][pixel+(1,)] += 1
+                        trainDataFeatureCount[label][pixel+(1,)] += 1
                     elif(trainingData[index][pixel] == 0):
-                        initialPixelCount[key][pixel+(0,)] += 1
-            # break
-        # print('initialPixelCount',initialPixelCount)
-        # print('initialPixelCount[0][(12, 6, 1)]',initialPixelCount[0][(12, 6, 1)])
-        # print('initialPixelCount[0][(12, 6, 0)]',initialPixelCount[0][(12, 6, 0)])
-        # print('Should be 97',initialPixelCount[0][(12, 6, 1)] + initialPixelCount[0][(12, 6, 0)])
-        # initialPixelCount[]
-        # print('Training data', trainingData[index][(10, 11)])
-        #return [0,1,2]
-        #util.raiseNotDefined()
-        # self.features.sort()
-        # print('self.features',self.features)
-        # print('self.legalLabels',self.legalLabels)
+                        trainDataFeatureCount[label][pixel+(0,)] += 1
 
         #
         #choose the best k by creating conditional probability table for each k then running it against validation set
         #
 
         #build conditional probability table for each k
-        conditionalProbforK = self.buildConditionalProbTableForEachK(kgrid,initialPixelCount)
+        conditionalProbforK = self.buildConditionalProbTableForEachK(kgrid,trainDataFeatureCount)
 
-        #evaluate best K for smoothing
+        #evaluate best K conditional probability table inside of conditionalProbforK
         self.evaluateBestK(kgrid, conditionalProbforK,validationData,validateKeysDict)
-
-        print('conditionalProbforK[1][0][(12,6)]',conditionalProbforK[1][0][(12,6)])
-        print('conditionalProbforK[1][0]',conditionalProbforK[1][0])
 
     def classify(self, testData):
         """
@@ -178,10 +174,15 @@ class NaiveBayesClassifier(classificationMethod.ClassificationMethod):
         self.legalLabels.
         """
         logJoint = util.Counter()
-        logJoint[1] += 1
-        # print('datum in logJoint Func',datum)
         "*** YOUR CODE HERE ***"
-        # util.raiseNotDefined()
+        self.features.sort()
+        for label in self.legalLabels:
+            featureProbsForLabel = self.conditionalProbTable[label]
+            condProbCounter = 0 #add all of the conditional probabilties
+            for feature in self.features:
+                res = datum[feature] #res should be 0 or 1
+                condProbCounter += math.log(featureProbsForLabel[feature][res])
+            logJoint[label] = math.log(self.priorProb[label]) + condProbCounter
         return logJoint
 
     def findHighOddsFeatures(self, label1, label2):
