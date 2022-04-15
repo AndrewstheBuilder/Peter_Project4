@@ -106,6 +106,7 @@ class NaiveBayesClassifier(classificationMethod.ClassificationMethod):
             if(bestAccuracy < currAccuracy ):
                 bestAccuracy = currAccuracy
                 bestK = k
+        self.setSmoothing(bestK)
         self.conditionalProbTable = conditionalProbForK[bestK] #set conditional table to best conditional table
 
 
@@ -195,7 +196,21 @@ class NaiveBayesClassifier(classificationMethod.ClassificationMethod):
         featuresOdds = []
 
         "*** YOUR CODE HERE ***"
-        # print('label1',label1)
-        # print('label2',label2)
-        util.raiseNotDefined()
+        label1CondTable = self.conditionalProbTable[label1]
+        label2CondTable = self.conditionalProbTable[label2]
+        bestFeaturesDict = OrderedDict()
+        for feature in self.features:
+            res = (label1CondTable[feature][1]+self.k)/(label2CondTable[feature][1]+self.k)
+            if res > 1:
+                if(res not in bestFeaturesDict):
+                    bestFeaturesDict[res] = []
+                else:
+                    bestFeaturesDict[res].append(feature)
+        orderedBestFeatures = OrderedDict(sorted(bestFeaturesDict.items(),reverse = True))
+        i = 0
+        for res,feature in orderedBestFeatures.items():
+            featuresOdds.extend(feature)
+            i += len(feature)
+            if(i >= 100):
+                break
         return featuresOdds
