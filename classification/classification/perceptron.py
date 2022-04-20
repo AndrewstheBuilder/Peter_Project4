@@ -91,6 +91,10 @@ class PerceptronClassifier:
         featuresWeights = []
 
         "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        weightsCopy = self.weights[label].copy()
+        for i in range(100):
+            maxFeature = weightsCopy.argMax()
+            featuresWeights.append(maxFeature)
+            weightsCopy[maxFeature] = 0
 
         return featuresWeights
